@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>FoxPrint</RootNamespace>
+
+    <!-- Package Metadata -->
+    <PackageId>FoxPrint.QrCodeGenerator</PackageId>
+    <Description>Generate cryptographically-signed QR codes for FoxNest receipt printing. Enables POS systems to create ephemeral, HMAC-SHA256 signed QR codes with printer-optimized image generation (PNG, BMP). Designed for multi-tenant POS integrations with thermal and receipt printer support.</Description>
+    <PackageTags>qr-code;qrcode;pos;payment;receipt;foxnest;foxprint;hmac;cryptography;thermal-printer;image-generation</PackageTags>
+
+    <!-- Documentation -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="QRCoder" Version="1.4.3" />
+  </ItemGroup>
+
+</Project>

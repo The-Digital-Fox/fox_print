@@ -1,0 +1,182 @@
+name: Publish to NuGet
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # Trigger on semantic version tags (e.g., v1.0.0, v1.2.3-beta.1)
+
+env:
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  validate:
+    name: Validate Release
+    runs-on: ubuntu-latest
+
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Extract version from tag
+      id: version
+      run: |
+        VERSION=${GITHUB_REF#refs/tags/v}
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Detected version: $VERSION"
+
+    - name: Validate version format
+      run: |
+        VERSION="${{ steps.version.outputs.version }}"
+        if [[ ! $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+(\.[0-9]+)?)?$ ]]; then
+          echo "Error: Invalid version format '$VERSION'"
+          echo "Expected: X.Y.Z or X.Y.Z-prerelease"
+          exit 1
+        fi
+        echo "Version format is valid: $VERSION"
+
+  build-and-test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    needs: validate
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup .NET SDK
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
+
+    - name: Restore dependencies
+      run: dotnet restore
+
+    - name: Build solution
+      run: dotnet build --configuration Release --no-restore
+
+    - name: Run tests
+      run: dotnet test --configuration Release --no-build --verbosity normal
+
+  publish:
+    name: Publish NuGet Package
+    runs-on: ubuntu-latest
+    needs: [validate, build-and-test]
+    environment: nuget-production
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup .NET SDK
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
+
+    - name: Update version in Directory.Build.props
+      run: |
+        VERSION="${{ needs.validate.outputs.version }}"
+        echo "Setting version to: $VERSION"
+        sed -i "s|<Version>.*</Version>|<Version>$VERSION</Version>|g" src/Directory.Build.props
+        sed -i "s|<AssemblyVersion>.*</AssemblyVersion>|<AssemblyVersion>${VERSION%%-*}.0</AssemblyVersion>|g" src/Directory.Build.props
+        sed -i "s|<FileVersion>.*</FileVersion>|<FileVersion>${VERSION%%-*}.0</FileVersion>|g" src/Directory.Build.props
+        cat src/Directory.Build.props
+
+    - name: Restore dependencies
+      run: dotnet restore
+
+    - name: Build solution
+      run: dotnet build --configuration Release --no-restore
+
+    - name: Create NuGet package
+      run: |
+        dotnet pack src/FoxPrint.QrCodeGenerator/FoxPrint.QrCodeGenerator.csproj \
+          --configuration Release \
+          --no-build \
+          --output ./artifacts \
+          -p:PackageVersion=${{ needs.validate.outputs.version }}
+
+    - name: List packages
+      run: ls -la ./artifacts/
+
+    - name: Publish to NuGet.org
+      run: |
+        dotnet nuget push ./artifacts/*.nupkg \
+          --api-key ${{ secrets.NUGET_API_KEY }} \
+          --source https://api.nuget.org/v3/index.json \
+          --skip-duplicate
+
+    - name: Upload packages as artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: nuget-package-${{ needs.validate.outputs.version }}
+        path: |
+          ./artifacts/*.nupkg
+          ./artifacts/*.snupkg
+        retention-days: 90
+
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [validate, publish]
+    permissions:
+      contents: write
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Download packages
+      uses: actions/download-artifact@v4
+      with:
+        name: nuget-package-${{ needs.validate.outputs.version }}
+        path: ./artifacts
+
+    - name: Extract release notes from CHANGELOG
+      id: changelog
+      run: |
+        VERSION="${{ needs.validate.outputs.version }}"
+        # Extract the section for this version from CHANGELOG.md
+        NOTES=$(sed -n "/## \[$VERSION\]/,/## \[/p" CHANGELOG.md | sed '$ d' | tail -n +2)
+        if [ -z "$NOTES" ]; then
+          NOTES="Release version $VERSION. See [CHANGELOG.md](CHANGELOG.md) for details."
+        fi
+        echo "notes<<EOF" >> $GITHUB_OUTPUT
+        echo "$NOTES" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        name: FoxPrint v${{ needs.validate.outputs.version }}
+        body: |
+          ## FoxPrint v${{ needs.validate.outputs.version }}
+
+          ${{ steps.changelog.outputs.notes }}
+
+          ### Installation
+
+          ```bash
+          dotnet add package FoxPrint.QrCodeGenerator --version ${{ needs.validate.outputs.version }}
+          ```
+
+          ### NuGet Package
+
+          - [FoxPrint.QrCodeGenerator](https://www.nuget.org/packages/FoxPrint.QrCodeGenerator/${{ needs.validate.outputs.version }})
+        files: |
+          ./artifacts/*.nupkg
+          ./artifacts/*.snupkg
+        draft: false
+        prerelease: ${{ contains(needs.validate.outputs.version, '-') }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

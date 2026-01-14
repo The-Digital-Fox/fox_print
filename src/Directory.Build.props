@@ -1,0 +1,61 @@
+<Project>
+  <!--
+    Shared build properties for FoxPrint NuGet packages.
+    See: https://learn.microsoft.com/en-us/visualstudio/msbuild/customize-by-directory
+  -->
+
+  <PropertyGroup>
+    <!-- Package Identity -->
+    <Authors>Digital Fox</Authors>
+    <Company>Digital Fox</Company>
+    <Product>FoxPrint</Product>
+    <Copyright>Copyright (c) Digital Fox 2026</Copyright>
+
+    <!-- Versioning - Follows Semantic Versioning 2.0.0 -->
+    <!-- https://semver.org/ -->
+    <Version>1.0.0</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+
+    <!-- Package Metadata -->
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/The-Digital-Fox/fox_print</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/The-Digital-Fox/fox_print</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <!-- Package icon is optional - add icon.png to project root if desired -->
+    <PackageIcon Condition="Exists('$(MSBuildThisFileDirectory)../icon.png')">icon.png</PackageIcon>
+    <PackageReleaseNotes>See https://github.com/The-Digital-Fox/fox_print/blob/main/CHANGELOG.md</PackageReleaseNotes>
+
+    <!-- Build Configuration -->
+    <LangVersion>latest</LangVersion>
+    <!-- Nullable disabled for .NET Standard 2.0 compatibility -->
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <WarningLevel>5</WarningLevel>
+
+    <!-- Package Output -->
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+
+    <!-- Source Link for debugging -->
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+
+  <!-- Include package assets -->
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)../icon.png" Pack="true" PackagePath="/" Condition="Exists('$(MSBuildThisFileDirectory)../icon.png')" />
+    <None Include="$(MSBuildThisFileDirectory)../README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+  <!-- Source Link for GitHub -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
+  </ItemGroup>
+
+</Project>
