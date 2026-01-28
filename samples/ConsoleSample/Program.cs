@@ -12,82 +12,103 @@ namespace ConsoleSample
             Console.WriteLine("=== FoxPrint - Receipt QR Code Generator ===");
             Console.WriteLine();
 
-            // Configuration
-            string storeId = "store_demo_123";
-            string sharedSecret = "demo-secret-key-change-in-production";
-            string tableNumber = "TABLE-15";
-
             try
             {
-                // Initialize the QR code URL generator
-                var qrGenerator = new ReceiptQRGenerator(storeId, sharedSecret);
+                // Get configuration from user
+                string storeId = PromptForInput("Enter Store ID");
+                string sharedSecret = PromptForInput("Enter Shared Secret");
+                int fromTable = PromptForInt("Enter From Table Number");
+                int toTable = PromptForInt("Enter To Table Number");
+                FoxNestEnvironment environment = PromptForEnvironment();
 
+                Console.WriteLine();
+                Console.WriteLine("=== Configuration ===");
                 Console.WriteLine($"Store ID: {storeId}");
-                Console.WriteLine($"Table Number: {tableNumber}");
+                Console.WriteLine($"Environment: {environment} ({FoxNestEnvironments.GetUrl(environment)})");
+                Console.WriteLine($"Table Range: {fromTable} - {toTable}");
                 Console.WriteLine();
 
-                // Generate QR code URL
-                string qrUrl = qrGenerator.GenerateQRCodeUrl(tableNumber);
-                Console.WriteLine($"QR Code URL:");
-                Console.WriteLine($"{qrUrl}");
-                Console.WriteLine();
+                // Validate table range
+                if (fromTable > toTable)
+                {
+                    Console.WriteLine("ERROR: 'From Table' must be less than or equal to 'To Table'");
+                    return;
+                }
 
-                // Verify the slug
-                string slug = ReceiptQRGenerator.ExtractSlugFromUrl(qrUrl);
-                bool isValid = qrGenerator.VerifySlug(slug, out string extractedTableNumber);
-
-                Console.WriteLine($"Slug Verification: {(isValid ? "VALID" : "INVALID")}");
-                Console.WriteLine($"Extracted Table Number: {extractedTableNumber}");
-                Console.WriteLine();
-
-                // Initialize image generator
+                // Initialize generators
+                var qrGenerator = new ReceiptQRGenerator(storeId, sharedSecret, environment);
                 var imageGenerator = new QRCodeImageGenerator();
 
-                // Generate different formats
-                Console.WriteLine("Generating QR code images...");
+                // Create output directory inside the ConsoleSample project folder
+                string projectDir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", ".."));
+                string outputDir = Path.Combine(projectDir, "output", storeId, environment.ToString().ToLowerInvariant());
+                Directory.CreateDirectory(outputDir);
+
+                Console.WriteLine($"Generating QR codes for {toTable - fromTable + 1} tables...");
                 Console.WriteLine();
 
-                // Ensure output directory exists
-                Directory.CreateDirectory("output");
+                int successCount = 0;
+                for (int tableNum = fromTable; tableNum <= toTable; tableNum++)
+                {
+                    string tableNumber = tableNum.ToString();
+                    string checkId = $"CHK-{tableNum:D5}"; // Example check ID
 
-                // 1. PNG format (general use)
-                GenerateAndSave(imageGenerator, qrUrl, "output/qr_code.png",
-                    new QRCodeOptions
+                    try
                     {
-                        Size = 200,
-                        Format = ImageFormat.PNG,
-                        ErrorCorrection = ErrorCorrectionLevel.Medium
-                    },
-                    "PNG format (200x200)");
+                        // Generate QR code URL
+                        string qrUrl = qrGenerator.GenerateQRCodeUrl(tableNumber, checkId);
 
-                // 2. BMP format for thermal printer
-                byte[] thermalQR = imageGenerator.GenerateForThermalPrinter(qrUrl, 200);
-                File.WriteAllBytes("output/qr_thermal.bmp", thermalQR);
-                Console.WriteLine($"  Thermal printer format: output/qr_thermal.bmp ({thermalQR.Length} bytes)");
+                        // Generate image
+                        byte[] qrImage = imageGenerator.GenerateForReceiptPrinter(qrUrl, 200);
 
-                // 3. BMP format for receipt printer
-                byte[] receiptQR = imageGenerator.GenerateForReceiptPrinter(qrUrl, 150);
-                File.WriteAllBytes("output/qr_receipt.bmp", receiptQR);
-                Console.WriteLine($"  Receipt printer format: output/qr_receipt.bmp ({receiptQR.Length} bytes)");
+                        // Save to file
+                        string fileName = $"table_{tableNum:D3}.bmp";
+                        string filePath = Path.Combine(outputDir, fileName);
 
-                // 4. High error correction (for damaged environments)
-                GenerateAndSave(imageGenerator, qrUrl, "output/qr_high_ecc.png",
-                    new QRCodeOptions
+                        // // Use PNG for better compatibility
+                        // byte[] pngImage = imageGenerator.GenerateImage(qrUrl, new QRCodeOptions
+                        // {
+                        //     Size = 200,
+                        //     Format = ImageFormat.PNG,
+                        //     ErrorCorrection = ErrorCorrectionLevel.Medium
+                        // });
+                        File.WriteAllBytes(filePath, qrImage);
+
+                        Console.WriteLine($"  Table {tableNum}: {filePath}");
+                        Console.WriteLine($"    URL: {qrUrl}");
+                        Console.WriteLine($"    Check ID: {checkId}");
+
+                        successCount++;
+                    }
+                    catch (Exception ex)
                     {
-                        Size = 250,
-                        Format = ImageFormat.PNG,
-                        ErrorCorrection = ErrorCorrectionLevel.High
-                    },
-                    "High error correction (250x250)");
+                        Console.WriteLine($"  Table {tableNum}: ERROR - {ex.Message}");
+                    }
+                }
 
                 Console.WriteLine();
-                Console.WriteLine("=== Success! ===");
-                Console.WriteLine("All QR codes have been generated in the 'output' directory.");
+                Console.WriteLine("=== Summary ===");
+                Console.WriteLine($"Generated: {successCount}/{toTable - fromTable + 1} QR codes");
+                Console.WriteLine($"Output Directory: {Path.GetFullPath(outputDir)}");
                 Console.WriteLine();
-                Console.WriteLine("Next steps:");
-                Console.WriteLine("1. Open the images to verify they work");
-                Console.WriteLine("2. Scan them with your phone to test the URL");
-                Console.WriteLine("3. Integrate the library into your POS system");
+
+                // Generate a verification test
+                if (successCount > 0)
+                {
+                    Console.WriteLine("=== Verification ===");
+                    string testTable = fromTable.ToString();
+                    string testCheckId = $"CHK-{fromTable:D5}";
+                    string testUrl = qrGenerator.GenerateQRCodeUrl(testTable, testCheckId);
+                    string slug = ReceiptQRGenerator.ExtractSlugFromUrl(testUrl);
+                    bool isValid = qrGenerator.VerifySlug(slug, out string extractedTable, out string extractedTablePart, out string extractedCheckId);
+
+                    Console.WriteLine($"Test Table: {testTable}");
+                    Console.WriteLine($"Test Check ID: {testCheckId}");
+                    Console.WriteLine($"Slug Valid: {(isValid ? "YES" : "NO")}");
+                    Console.WriteLine($"Extracted Table: {extractedTable}");
+                    Console.WriteLine($"Extracted Check ID: {extractedCheckId}");
+                    Console.WriteLine($"Extracted Table Part: {extractedTablePart}");
+                }
             }
             catch (Exception ex)
             {
@@ -98,11 +119,52 @@ namespace ConsoleSample
             Console.WriteLine();
         }
 
-        static void GenerateAndSave(QRCodeImageGenerator generator, string url, string filePath, QRCodeOptions options, string description)
+        static string PromptForInput(string prompt)
         {
-            byte[] imageBytes = generator.GenerateImage(url, options);
-            File.WriteAllBytes(filePath, imageBytes);
-            Console.WriteLine($"  {description}: {filePath} ({imageBytes.Length} bytes)");
+            Console.Write($"{prompt}: ");
+            string input = Console.ReadLine()?.Trim() ?? string.Empty;
+
+            if (string.IsNullOrWhiteSpace(input))
+            {
+                throw new ArgumentException($"{prompt} cannot be empty");
+            }
+
+            return input;
+        }
+
+        static int PromptForInt(string prompt)
+        {
+            Console.Write($"{prompt}: ");
+            string input = Console.ReadLine()?.Trim() ?? string.Empty;
+
+            if (!int.TryParse(input, out int value) || value < 0)
+            {
+                throw new ArgumentException($"{prompt} must be a valid positive number");
+            }
+
+            return value;
+        }
+
+        static FoxNestEnvironment PromptForEnvironment()
+        {
+            Console.WriteLine();
+            Console.WriteLine("Select Environment:");
+            Console.WriteLine("  1. Local       (http://localhost:3007)");
+            Console.WriteLine("  2. Development (https://dev-go-v2.thedigitalfox.com)");
+            Console.WriteLine("  3. UAT         (https://uat-go-v2.thedigitalfox.com)");
+            Console.WriteLine("  4. Production  (https://go.thedigitalfox.com)");
+            Console.Write("Enter choice (1-4): ");
+
+            string input = Console.ReadLine()?.Trim() ?? string.Empty;
+
+            return input switch
+            {
+                "1" => FoxNestEnvironment.Local,
+                "2" => FoxNestEnvironment.Development,
+                "3" => FoxNestEnvironment.Uat,
+                "4" => FoxNestEnvironment.Production,
+                _ => throw new ArgumentException("Invalid environment selection. Please enter 1, 2, 3, or 4.")
+            };
         }
     }
 }

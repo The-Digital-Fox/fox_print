@@ -8,6 +8,8 @@ public class ReceiptQRGeneratorTests
     private const string TestStoreId = "store_abc_123";
     private const string TestSecret = "test-secret-key-12345";
     private const string TestTableNumber = "TABLE-15";
+    private const string TestCheckId = "CHK-12345";
+    private const string TestTablePart = "PART-A";
 
     [Fact]
     public void Constructor_WithValidParameters_CreatesInstance()
@@ -16,7 +18,7 @@ public class ReceiptQRGeneratorTests
 
         Assert.NotNull(generator);
         Assert.Equal(TestStoreId, generator.StoreId);
-        Assert.Equal("https://api.foxnest.com", generator.BaseUrl);
+        Assert.Equal(FoxNestEnvironments.Production, generator.BaseUrl);
     }
 
     [Fact]
@@ -50,10 +52,10 @@ public class ReceiptQRGeneratorTests
     {
         var generator = new ReceiptQRGenerator(TestStoreId, TestSecret);
 
-        var url = generator.GenerateQRCodeUrl(TestTableNumber);
+        var url = generator.GenerateQRCodeUrl(TestTableNumber, TestCheckId);
 
         Assert.NotNull(url);
-        Assert.StartsWith("https://api.foxnest.com/v1/scan/", url);
+        Assert.StartsWith($"{FoxNestEnvironments.Production}/v1/scan/", url);
     }
 
     [Theory]
@@ -64,7 +66,18 @@ public class ReceiptQRGeneratorTests
     {
         var generator = new ReceiptQRGenerator(TestStoreId, TestSecret);
 
-        Assert.Throws<ArgumentException>(() => generator.GenerateQRCodeUrl(tableNumber!));
+        Assert.Throws<ArgumentException>(() => generator.GenerateQRCodeUrl(tableNumber!, TestCheckId));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void GenerateQRCodeUrl_WithEmptyCheckId_ThrowsArgumentException(string? checkId)
+    {
+        var generator = new ReceiptQRGenerator(TestStoreId, TestSecret);
+
+        Assert.Throws<ArgumentException>(() => generator.GenerateQRCodeUrl(TestTableNumber, checkId!));
     }
 
     [Fact]
@@ -72,14 +85,65 @@ public class ReceiptQRGeneratorTests
     {
         var generator = new ReceiptQRGenerator(TestStoreId, TestSecret);
 
-        Assert.Throws<ArgumentException>(() => generator.GenerateQRCodeUrl("TABLE:15"));
+        Assert.Throws<ArgumentException>(() => generator.GenerateQRCodeUrl("TABLE:15", TestCheckId));
+    }
+
+    [Fact]
+    public void GenerateQRCodeUrl_WithColonInCheckId_ThrowsArgumentException()
+    {
+        var generator = new ReceiptQRGenerator(TestStoreId, TestSecret);
+
+        Assert.Throws<ArgumentException>(() => generator.GenerateQRCodeUrl(TestTableNumber, "CHK:123"));
+    }
+
+    [Fact]
+    public void GenerateQRCodeUrl_WithTablePart_ReturnsValidUrl()
+    {
+        var generator = new ReceiptQRGenerator(TestStoreId, TestSecret);
+
+        var url = generator.GenerateQRCodeUrl(TestTableNumber, TestCheckId, TestTablePart);
+
+        Assert.NotNull(url);
+        Assert.StartsWith($"{FoxNestEnvironments.Production}/v1/scan/", url);
+    }
+
+    [Fact]
+    public void GenerateQRCodeUrl_WithoutTablePart_UsesDefaultValue()
+    {
+        var generator = new ReceiptQRGenerator(TestStoreId, TestSecret);
+        var url = generator.GenerateQRCodeUrl(TestTableNumber, TestCheckId);
+        var slug = ReceiptQRGenerator.ExtractSlugFromUrl(url);
+
+        var result = generator.VerifySlug(slug, out _, out var extractedTablePart, out _);
+
+        Assert.True(result);
+        Assert.Equal("n/a", extractedTablePart);
+    }
+
+    [Fact]
+    public void GenerateQRCodeUrl_WithColonInTablePart_ThrowsArgumentException()
+    {
+        var generator = new ReceiptQRGenerator(TestStoreId, TestSecret);
+
+        Assert.Throws<ArgumentException>(() => generator.GenerateQRCodeUrl(TestTableNumber, TestCheckId, "PART:A"));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void GenerateQRCodeUrl_WithEmptyTablePart_ThrowsArgumentException(string? tablePart)
+    {
+        var generator = new ReceiptQRGenerator(TestStoreId, TestSecret);
+
+        Assert.Throws<ArgumentException>(() => generator.GenerateQRCodeUrl(TestTableNumber, TestCheckId, tablePart!));
     }
 
     [Fact]
     public void VerifySlug_WithValidSlug_ReturnsTrue()
     {
         var generator = new ReceiptQRGenerator(TestStoreId, TestSecret);
-        var url = generator.GenerateQRCodeUrl(TestTableNumber);
+        var url = generator.GenerateQRCodeUrl(TestTableNumber, TestCheckId);
         var slug = ReceiptQRGenerator.ExtractSlugFromUrl(url);
 
         var result = generator.VerifySlug(slug, out var extractedTableNumber);
@@ -89,10 +153,25 @@ public class ReceiptQRGeneratorTests
     }
 
     [Fact]
+    public void VerifySlug_WithTablePart_ExtractsAllValues()
+    {
+        var generator = new ReceiptQRGenerator(TestStoreId, TestSecret);
+        var url = generator.GenerateQRCodeUrl(TestTableNumber, TestCheckId, TestTablePart);
+        var slug = ReceiptQRGenerator.ExtractSlugFromUrl(url);
+
+        var result = generator.VerifySlug(slug, out var extractedTableNumber, out var extractedTablePart, out var extractedCheckId);
+
+        Assert.True(result);
+        Assert.Equal(TestTableNumber, extractedTableNumber);
+        Assert.Equal(TestTablePart, extractedTablePart);
+        Assert.Equal(TestCheckId, extractedCheckId);
+    }
+
+    [Fact]
     public void VerifySlug_WithTamperedSlug_ReturnsFalse()
     {
         var generator = new ReceiptQRGenerator(TestStoreId, TestSecret);
-        var url = generator.GenerateQRCodeUrl(TestTableNumber);
+        var url = generator.GenerateQRCodeUrl(TestTableNumber, TestCheckId);
         var slug = ReceiptQRGenerator.ExtractSlugFromUrl(url);
         var tamperedSlug = slug.Substring(0, slug.Length - 5) + "XXXXX";
 
@@ -106,7 +185,7 @@ public class ReceiptQRGeneratorTests
     {
         var generator1 = new ReceiptQRGenerator(TestStoreId, TestSecret);
         var generator2 = new ReceiptQRGenerator(TestStoreId, "different-secret");
-        var url = generator1.GenerateQRCodeUrl(TestTableNumber);
+        var url = generator1.GenerateQRCodeUrl(TestTableNumber, TestCheckId);
         var slug = ReceiptQRGenerator.ExtractSlugFromUrl(url);
 
         var result = generator2.VerifySlug(slug, out _);
