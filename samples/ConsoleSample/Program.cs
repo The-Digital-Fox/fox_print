@@ -7,7 +7,7 @@ namespace ConsoleSample
 {
     class Program
     {
-        static void Main(string[] args)
+        static void Main()
         {
             Console.WriteLine("=== FoxPrint - Receipt QR Code Generator ===");
             Console.WriteLine();
@@ -17,6 +17,7 @@ namespace ConsoleSample
                 // Get configuration from user
                 string storeId = PromptForInput("Enter Store ID");
                 string sharedSecret = PromptForInput("Enter Shared Secret");
+                string tablePart = PromptForInput("Enter Table Part");
                 int fromTable = PromptForInt("Enter From Table Number");
                 int toTable = PromptForInt("Enter To Table Number");
                 FoxNestEnvironment environment = PromptForEnvironment();
@@ -47,6 +48,9 @@ namespace ConsoleSample
                 Console.WriteLine($"Generating QR codes for {toTable - fromTable + 1} tables...");
                 Console.WriteLine();
 
+                Console.WriteLine("Logo embedding: ENABLED (High error correction applied automatically)");
+                Console.WriteLine();
+
                 int successCount = 0;
                 for (int tableNum = fromTable; tableNum <= toTable; tableNum++)
                 {
@@ -56,22 +60,19 @@ namespace ConsoleSample
                     try
                     {
                         // Generate QR code URL
-                        string qrUrl = qrGenerator.GenerateQRCodeUrl(tableNumber, checkId);
+                        string qrUrl = qrGenerator.GenerateQRCodeUrl(tableNumber, checkId, string.IsNullOrEmpty(tablePart) ? "n/a" : tablePart);
 
-                        // Generate image
-                        byte[] qrImage = imageGenerator.GenerateForReceiptPrinter(qrUrl, 200);
+                        // Generate PNG image with embedded FoxPrint logo
+                        byte[] qrImage = imageGenerator.GenerateImage(qrUrl, new QRCodeOptions
+                        {
+                            Size = 400,
+                            Format = ImageFormat.PNG,
+                            EmbedLogo = true
+                        });
 
                         // Save to file
-                        string fileName = $"table_{tableNum:D3}.bmp";
+                        string fileName = $"table_{tableNum:D3}.png";
                         string filePath = Path.Combine(outputDir, fileName);
-
-                        // // Use PNG for better compatibility
-                        // byte[] pngImage = imageGenerator.GenerateImage(qrUrl, new QRCodeOptions
-                        // {
-                        //     Size = 200,
-                        //     Format = ImageFormat.PNG,
-                        //     ErrorCorrection = ErrorCorrectionLevel.Medium
-                        // });
                         File.WriteAllBytes(filePath, qrImage);
 
                         Console.WriteLine($"  Table {tableNum}: {filePath}");
