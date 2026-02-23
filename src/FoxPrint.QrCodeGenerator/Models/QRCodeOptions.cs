@@ -31,6 +31,12 @@ namespace FoxPrint.Models
         public PrinterType PrinterType { get; set; } = PrinterType.None;
 
         /// <summary>
+        /// Embed the FoxPrint logo in the center of the QR code (default: true).
+        /// Automatically uses High error correction to ensure scannability.
+        /// </summary>
+        public bool EmbedLogo { get; set; } = true;
+
+        /// <summary>
         /// Default options
         /// </summary>
         public static QRCodeOptions Default => new QRCodeOptions();

@@ -17,6 +17,12 @@
 
   <ItemGroup>
     <PackageReference Include="QRCoder" Version="1.4.3" />
+    <PackageReference Include="SkiaSharp" Version="2.88.8" />
+    <PackageReference Include="Svg.Skia" Version="1.0.0.18" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\logo.svg" />
   </ItemGroup>
 
 </Project>
