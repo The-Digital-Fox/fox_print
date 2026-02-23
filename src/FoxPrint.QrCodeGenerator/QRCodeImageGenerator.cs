@@ -130,49 +130,40 @@ namespace FoxPrint
 
         private byte[] EmbedLogoIntoImage(byte[] pngBytes, QRCodeOptions options)
         {
-            try
+            using (var qrBitmap = SKBitmap.Decode(pngBytes))
             {
-                using (var qrBitmap = SKBitmap.Decode(pngBytes))
+                if (qrBitmap == null)
+                    throw new InvalidOperationException("SKBitmap.Decode returned null — the QR PNG bytes could not be decoded.");
+
+                var imageInfo = new SKImageInfo(qrBitmap.Width, qrBitmap.Height, SKColorType.Bgra8888, SKAlphaType.Premul);
+                using (var workBitmap = new SKBitmap(imageInfo))
                 {
-                    if (qrBitmap == null)
-                        return pngBytes;
-
-                    var imageInfo = new SKImageInfo(qrBitmap.Width, qrBitmap.Height, SKColorType.Bgra8888, SKAlphaType.Premul);
-                    using (var workBitmap = new SKBitmap(imageInfo))
+                    using (var canvas = new SKCanvas(workBitmap))
                     {
-                        using (var canvas = new SKCanvas(workBitmap))
-                        {
-                            canvas.Clear(SKColors.White);
-                            canvas.DrawBitmap(qrBitmap, 0, 0);
-                            DrawLogoCenter(canvas, qrBitmap.Width, qrBitmap.Height);
-                        }
+                        canvas.Clear(SKColors.White);
+                        canvas.DrawBitmap(qrBitmap, 0, 0);
+                        DrawLogoCenter(canvas, qrBitmap.Width, qrBitmap.Height);
+                    }
 
-                        if (options.Monochrome)
-                            ApplyMonochromeFilter(workBitmap);
+                    if (options.Monochrome)
+                        ApplyMonochromeFilter(workBitmap);
 
-                        var skFormat = options.Format == ImageFormat.BMP
-                            ? SKEncodedImageFormat.Bmp
-                            : SKEncodedImageFormat.Png;
+                    using (var stream = new SKDynamicMemoryWStream())
+                    {
+                        if (!workBitmap.Encode(stream, SKEncodedImageFormat.Png, 100))
+                            throw new InvalidOperationException("SKBitmap.Encode failed for PNG.");
 
-                        using (var image = SKImage.FromBitmap(workBitmap))
-                        using (var data = image.Encode(skFormat, 100))
-                        {
+                        using (var data = stream.DetachAsData())
                             return data.ToArray();
-                        }
                     }
                 }
-            }
-            catch
-            {
-                // If logo embedding fails for any reason, return the plain QR code.
-                return pngBytes;
             }
         }
 
         private void DrawLogoCenter(SKCanvas canvas, int width, int height)
         {
             var assembly = typeof(QRCodeImageGenerator).Assembly;
-            const string resourceName = "FoxPrint.QrCodeGenerator.Resources.logo.svg";
+            const string resourceName = "FoxPrint.Resources.logo.svg";
 
             using (var stream = assembly.GetManifestResourceStream(resourceName))
             {

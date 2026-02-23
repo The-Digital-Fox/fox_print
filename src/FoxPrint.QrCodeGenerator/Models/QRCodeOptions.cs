@@ -49,6 +49,7 @@ namespace FoxPrint.Models
             Size = size,
             Format = ImageFormat.BMP,
             Monochrome = true,
+            EmbedLogo = false,
             ErrorCorrection = ErrorCorrectionLevel.Medium,
             PrinterType = PrinterType.Thermal
         };
@@ -61,6 +62,7 @@ namespace FoxPrint.Models
             Size = size,
             Format = ImageFormat.BMP,
             Monochrome = true,
+            EmbedLogo = false,
             ErrorCorrection = ErrorCorrectionLevel.Low,
             PrinterType = PrinterType.Receipt
         };
